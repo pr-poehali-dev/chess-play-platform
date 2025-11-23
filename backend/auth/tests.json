@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Login with valid credentials",
+      "method": "POST",
+      "body": {
+        "action": "login",
+        "username": "testplayer",
+        "password": "securepass123"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "user": {
+          "username": "string"
+        }
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

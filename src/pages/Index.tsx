@@ -1,7 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
+
+const AUTH_API = 'https://functions.poehali.dev/ec1c5f00-a00d-4a21-b3ef-79bb6f4a7e80';
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  rating: number;
+  games_played: number;
+  games_won: number;
+  games_drawn: number;
+}
 
 type PieceType = 'king' | 'queen' | 'rook' | 'bishop' | 'knight' | 'pawn';
 type PieceColor = 'white' | 'black';
@@ -66,6 +82,11 @@ export default function Index() {
   const [timeLeft, setTimeLeft] = useState(300);
   const [isGameActive, setIsGameActive] = useState(false);
   const [currentPlayer, setCurrentPlayer] = useState<PieceColor>('white');
+  const [user, setUser] = useState<User | null>(null);
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authForm, setAuthForm] = useState({ username: '', email: '', password: '' });
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isGameActive && timeLeft > 0) {
@@ -106,12 +127,69 @@ export default function Index() {
   };
 
   const startGame = () => {
+    if (!user) {
+      toast({
+        title: 'Требуется авторизация',
+        description: 'Войдите или зарегистрируйтесь для игры',
+        variant: 'destructive'
+      });
+      setShowAuthDialog(true);
+      return;
+    }
     setBoard(initialBoard);
     setTimeLeft(300);
     setIsGameActive(true);
     setCurrentPlayer('white');
     setSelectedSquare(null);
     setActiveSection('play');
+  };
+
+  const handleAuth = async () => {
+    try {
+      const response = await fetch(AUTH_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: authMode,
+          username: authForm.username,
+          email: authMode === 'register' ? authForm.email : undefined,
+          password: authForm.password
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: 'Ошибка',
+          description: data.error || 'Произошла ошибка',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      setUser(data.user);
+      setShowAuthDialog(false);
+      setAuthForm({ username: '', email: '', password: '' });
+      toast({
+        title: 'Успешно',
+        description: authMode === 'login' ? 'Вы вошли в систему' : 'Регистрация завершена'
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось подключиться к серверу',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    toast({
+      title: 'Выход',
+      description: 'Вы вышли из системы'
+    });
   };
 
   return (
@@ -143,9 +221,19 @@ export default function Index() {
               ))}
             </div>
 
-            <Button size="sm" variant="outline">
-              <Icon name="User" size={16} />
-            </Button>
+            {user ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">{user.username}</span>
+                <Button size="sm" variant="outline" onClick={handleLogout}>
+                  <Icon name="LogOut" size={16} />
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" onClick={() => setShowAuthDialog(true)}>
+                <Icon name="User" size={16} className="mr-2" />
+                Войти
+              </Button>
+            )}
           </div>
         </div>
       </nav>
@@ -364,8 +452,8 @@ export default function Index() {
                 <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto text-3xl">
                   ♟️
                 </div>
-                <h3 className="text-xl font-semibold">Player_2024</h3>
-                <p className="text-muted-foreground">Рейтинг: 1420</p>
+                <h3 className="text-xl font-semibold">{user?.username || 'Guest'}</h3>
+                <p className="text-muted-foreground">Рейтинг: {user?.rating || 1200}</p>
               </Card>
 
               <Card className="p-6 space-y-3">
@@ -376,15 +464,15 @@ export default function Index() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Партий сыграно:</span>
-                    <span className="font-semibold">142</span>
+                    <span className="font-semibold">{user?.games_played || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Побед:</span>
-                    <span className="font-semibold text-green-500">78 (55%)</span>
+                    <span className="font-semibold text-green-500">{user?.games_won || 0} ({user && user.games_played > 0 ? Math.round((user.games_won / user.games_played) * 100) : 0}%)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Ничьих:</span>
-                    <span className="font-semibold">28 (20%)</span>
+                    <span className="font-semibold">{user?.games_drawn || 0} ({user && user.games_played > 0 ? Math.round((user.games_drawn / user.games_played) * 100) : 0}%)</span>
                   </div>
                 </div>
               </Card>
@@ -419,6 +507,64 @@ export default function Index() {
           <p>© 2024 ChessMaster. Играй, учись, побеждай</p>
         </div>
       </footer>
+
+      <Dialog open={showAuthDialog} onOpenChange={setShowAuthDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{authMode === 'login' ? 'Вход' : 'Регистрация'}</DialogTitle>
+            <DialogDescription>
+              {authMode === 'login' ? 'Войдите в свой аккаунт' : 'Создайте новый аккаунт'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Имя пользователя</Label>
+              <Input
+                id="username"
+                value={authForm.username}
+                onChange={(e) => setAuthForm({ ...authForm, username: e.target.value })}
+                placeholder="username123"
+              />
+            </div>
+            
+            {authMode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+                  placeholder="email@example.com"
+                />
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Пароль</Label>
+              <Input
+                id="password"
+                type="password"
+                value={authForm.password}
+                onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                placeholder="••••••••"
+              />
+            </div>
+            
+            <Button onClick={handleAuth} className="w-full">
+              {authMode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+            </Button>
+            
+            <button
+              onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+              className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {authMode === 'login' ? 'Нет аккаунта? Зарегистрируйтесь' : 'Уже есть аккаунт? Войдите'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
